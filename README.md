@@ -76,9 +76,9 @@ fprintd-enroll -f right-index-finger "$USER"   # 24 touches, ~1s each
   fingertip, which lowers false rejects).
 - The reader's threshold is device-specific, so this change does not alter
   behaviour for `04f3:0c4f`, `0c63`, `0c6e`.
-- Upstreaming: this could go to the `elanpress` driver
-  (github.com/filip-rs/libfprint, branch `elanpress`) and/or the Omarchy package
-  PR (`omacom/omarchy-pkgs#2329`) so it stops being a local patch.
+- Upstream: the same change is proposed to the `elanpress` driver as
+  [filip-rs/libfprint#14](https://github.com/filip-rs/libfprint/pull/14). Until
+  that lands, build this package to get it now.
 
 ## License
 
