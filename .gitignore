@@ -1,0 +1,5 @@
+libfprint-git-*.pkg.tar.zst
+libfprint-git-debug-*.pkg.tar.zst
+src/
+pkg/
+*.pkg.tar.*

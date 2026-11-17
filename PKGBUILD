@@ -1,0 +1,164 @@
+# Maintainer: Mikko Nyman <mikko@nyman.xyz>
+# Based on the Arch libfprint package by Jan Alexander Steffens (heftig).
+#
+# Omarchy's fingerprint setup installs this in place of stock libfprint, so
+# readers upstream supports ahead of an Arch release reach users by bumping
+# the pin here. Pinned to the commit adding the Synaptics reader USB
+# 06cb:010b, missing from stock libfprint 1.94.100; the FocalTech MOC support
+# carried by the previous pin is retained.
+#
+# On aarch64 it also carries the aurora driver for Apple Touch ID, which the
+# aurora kernel's Secure Enclave driver exposes as /dev/sep-bio
+# (aurora-apple-sep.patch, by Chris Kearney), plus two follow-ups from
+# aurora-silicon/aurora-sep-userspace: unusable captures are reported as
+# retries (aurora-touchid-retry.patch), and a reader the closed lid covers is
+# hidden while the lid is closed (aurora-touchid-lid-switch.patch). Both run
+# on the Aurora Fedora builds; here they are ported onto this driver. An
+# fprintd drop-in (fprintd-aurora-touchid.conf) lets fprintd's sandbox open
+# /dev/sep-bio and read the lid switch. The x86_64 build is unchanged.
+# The driver accepts only /dev/sep-bio interface version 4
+# (AURORA_BIO_IFACE_VERSION): a kernel that bumps it turns Touch ID off until
+# this patch follows, so move the two together.
+#
+# ELAN 04f3:0c4f, 04f3:0c63 and 04f3:0c6e are press sensors in the power
+# button. The stock elan driver claims them as swipe readers. Its status
+# command answers once and then wedges, so enrollment dies with a protocol
+# error, and the image is too small for minutiae matching. elanpress.patch
+# moves those three IDs to Filip Spanne's press driver. A verify that never
+# covers the whole pad still ends: after a short hold at about 60% coverage,
+# or when the finger lifts, that press is the picture. Enrollment still
+# waits for a full press. The match line stays 8 pairs. The pin above is
+# unchanged. 04f3:0c4b stays on the swipe driver.
+#
+# elanpress-0c3d.patch (local) adds 04f3:0c3d (FeinTech FPS00201) to the
+# press driver and takes it off the swipe driver. Its pad lights a pressed
+# finger more weakly than the pads above, so it also gets a lower pixel-delta
+# threshold through the id table's driver_data; the other press sensors keep
+# the original one.
+
+pkgname=libfprint-git
+pkgver=1.94.100.r10.g6f9479c
+pkgrel=7
+# Retain the epoch used to supersede the previously published untested build.
+epoch=1
+pkgdesc="Library for fingerprint readers (pinned upstream snapshot with FocalTech, Synaptics 06cb:010b and ELAN press sensors, and Apple Touch ID on aarch64)"
+url="https://fprint.freedesktop.org/"
+arch=(x86_64 aarch64)
+license=(LGPL-2.1-or-later)
+depends=(
+  gcc-libs
+  glib2
+  glibc
+  libgudev
+  libgusb
+  openssl
+  pixman
+)
+makedepends=(
+  git
+  glib2-devel
+  gobject-introspection
+  gtk-doc
+  meson
+  python-cairo
+  python-gobject
+  systemd
+)
+checkdepends=(
+  cairo
+  umockdev
+)
+# Versioned, so a package that requires a libfprint version still installs.
+provides=("libfprint=$pkgver" libfprint-2.so)
+conflicts=(libfprint)
+groups=(fprint)
+source=(
+  "git+https://gitlab.freedesktop.org/libfprint/libfprint.git#commit=6f9479c3d55f847c1b3769f28ceb99227f9858cf"
+  "focaltech_moc-add-pid-0xA97A.patch"
+  "elanpress.patch"
+  "elanpress-0c3d.patch"
+)
+source_aarch64=(
+  "aurora-apple-sep.patch"
+  "aurora-touchid-retry.patch"
+  "aurora-touchid-lid-switch.patch"
+  "fprintd-aurora-touchid.conf"
+)
+b2sums=(
+  'SKIP'
+  'SKIP'
+  '27c0a11f682f9b852f77958f8c2f9d07cf1d8653e8aa2963463b01cac85ea520bdc9f8c15107e6ee97381f3e3475518a0a3b87105c8fe583258a2e90380466ab'
+  'SKIP'
+)
+b2sums_aarch64=(
+  'ec577996066baf6db6d741763abd681aae5556d52a8b67f7a52a60a4df7015c5d1edf3637835e563b2fb0edde2499173d61c50717b621f6bddf94a1f700075e5'
+  'bf76dc472d5d77b777fad3ac55e696d9fb8a2ddc859f5f12b4ba7765ffd1eeef68b51c39d90cc7bea5ca7f6cc020102c2626a8e8d705619fc74c675089e1dda9'
+  'afd47da1f44d1868e69230f2005427c164fb57ffaff5cd8ccf3dd2393dc08d73f9e64d662839ac53fe7366fd9c8f4de148fd647b5c341fa4f06c8d0c96a451f7'
+  'b9a1a88f443548c2693722d80c660b4ceca8d2c398938a1f9d3d7f12aa61ef57d32c7630c1fd4076e6edb6be21770917f2dfeb0ff6f4ed8598a02c6c079653fc'
+)
+
+pkgver() {
+  cd libfprint
+  ( set -o pipefail
+    git describe --long --tags --abbrev=7 2>/dev/null \
+      | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' \
+      || printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+  )
+}
+
+prepare() {
+  cd libfprint
+
+  if ! grep -qi 'pid = 0xa97a' libfprint/drivers/focaltech_moc/focaltech_moc.c; then
+    patch -p1 < "$srcdir/focaltech_moc-add-pid-0xA97A.patch"
+  fi
+
+  # 04f3:0c4f, 0c63 and 0c6e are press sensors. The swipe driver wedges
+  # on them and enrollment dies with a protocol error.
+  if [[ ! -f libfprint/drivers/elanpress.c ]]; then
+    patch -p1 < "$srcdir/elanpress.patch"
+  fi
+
+  # 04f3:0c3d is the same kind of pad but lights a finger more weakly; it
+  # joins the press driver with a lower pixel-delta threshold of its own.
+  if ! grep -q '0x0c3d, .driver_data = ELANPRESS_0C3D' \
+       libfprint/drivers/elanpress.h; then
+    patch -p1 < "$srcdir/elanpress-0c3d.patch"
+  fi
+
+  # Skipped only when every hunk is already in: a tree a failed run left
+  # half-patched fails here instead of building.
+  if [[ $CARCH == "aarch64" ]]; then
+    local p
+    for p in aurora-apple-sep.patch aurora-touchid-retry.patch \
+      aurora-touchid-lid-switch.patch; do
+      if ! patch -p1 -R --dry-run --silent --force < "$srcdir/$p" >/dev/null 2>&1; then
+        patch -p1 --forward < "$srcdir/$p"
+      fi
+    done
+  fi
+}
+
+build() {
+  local meson_options=(
+    -D drivers=all
+    -D installed-tests=false
+  )
+  arch-meson libfprint build "${meson_options[@]}"
+  meson compile -C build
+}
+
+check() {
+  meson test -C build --print-errorlogs
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+
+  if [[ $CARCH == "aarch64" ]]; then
+    install -Dm644 "$srcdir/fprintd-aurora-touchid.conf" \
+      "$pkgdir/usr/lib/systemd/system/fprintd.service.d/50-libfprint-aurora-touchid.conf"
+  fi
+}
+
+# vim:set sw=2 sts=-1 et:
