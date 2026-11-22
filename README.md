@@ -155,6 +155,44 @@ $ fprintd-verify "$USER"
 Verify result: verify-match (done)
 ```
 
+## Fingerprint on the SDDM login screen
+
+A working print and PAM config are not enough by themselves — two SDDM defaults
+hide the option on Omarchy.
+
+**1. Autologin bypasses authentication entirely.** With
+`/etc/sddm.conf.d/autologin.conf` present, SDDM starts the session through
+`pam_unix(sddm-autologin:session)` and never asks for credentials, so
+`pam_fprintd` is never reached. Disable it (reversibly):
+
+```bash
+sudo mv /etc/sddm.conf.d/autologin.conf /etc/sddm.conf.d/autologin.conf.disabled
+```
+
+**2. The stock theme overrides the fingerprint theme.** Omarchy ships
+`~/.local/share/sddm/themes/omarchy-fingerprint`, but if
+`99-omarchy-login.conf` (`Current=omarchy`) loads after
+`99-omarchy-fingerprint.conf` (`Current=omarchy-fingerprint`), the plain theme
+wins. SDDM reads `/etc/sddm.conf.d/*.conf` in filename order, so rename the
+fingerprint file to sort last:
+
+```bash
+sudo mv /etc/sddm.conf.d/99-omarchy-fingerprint.conf \
+        /etc/sddm.conf.d/99-omarchy-zfingerprint.conf
+grep -H 'Current=' /etc/sddm.conf.d/*.conf   # fingerprint entry must be last
+```
+
+After logging out or rebooting, the login screen shows a `󰈷` glyph next to the
+password field. **Click the glyph** to start authentication with an empty
+password; `pam_fprintd` then prompts for the print. Touching the sensor alone
+does not initiate login from SDDM — the QML only wires the glyph's click to
+`sddm.login(...)`. If verification fails or times out, PAM falls back to the
+password field. The lock screen is different: there, Omarchy's
+`FingerprintModel.js` reacts to the sensor directly.
+
+Both renames are reversible — swap the filenames back to restore autologin or
+the stock theme.
+
 ## Notes
 
 - Enrollment is **24 touches** by design (more stored touches cover more of the
