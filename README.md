@@ -70,6 +70,55 @@ Existing enrollments survive a driver swap only if the driver id stays
 fprintd-enroll -f right-index-finger "$USER"   # 24 touches, ~1s each
 ```
 
+## Enrolling successfully (and not losing the print)
+
+The driver needs a **firm, centred press**, not a light touch and not a swipe.
+With `G_MESSAGES_DEBUG=all`, accepted frames on this pad sit at ~90–98% coverage:
+
+```text
+poll: touch (coverage 97,8%, mean delta 1112)
+enroll_stage_cb: result enroll-stage-passed
+```
+
+A light touch only reaches ~76–86%, below the driver's 85% gate, and is rejected
+(`touch covers ... waiting for a full press`). Use this rhythm for every stage:
+
+1. Put the right index finger in the middle of the pad.
+2. Press firmly and hold for about 1 second.
+3. Lift the finger **fully off** the pad.
+4. Wait about 1 second before the next press.
+
+Stage progress is **not saved** until enrollment finishes. All 24
+`enroll-stage-passed` results must happen in one uninterrupted run; stopping
+early (`Ctrl-C`) discards them and leaves `/var/lib/fprint` empty.
+
+`fprintd` repeats the same `Enroll result: enroll-stage-passed` line for every
+stage, which is easy to misread as a hung terminal in a small window. A one-line
+counter makes progress visible:
+
+```bash
+gdbus monitor --system --dest net.reactivated.Fprint |
+  grep --line-buffered -E 'enroll-stage-passed|enroll-completed' |
+  awk '/stage-passed/{printf "\rStage %d/24", ++n} /completed/{print "\nCompleted!"}'
+```
+
+**Do not rerun `omarchy setup security fingerprint` once a print exists.** It
+starts a new enrollment, which deletes the current print immediately (`/var/lib/fprint`
+was observed being emptied at that moment). PAM is already configured by
+`pam-fingerprint.sh`; to re-enroll, run `fprintd-enroll` directly instead.
+
+Verified on 2026-11-22 with `libfprint-git 1:1.94.100.r10.g6f9479c-7` and
+`fprintd 1.94.5-2`:
+
+```text
+$ fprintd-list "$USER"
+Fingerprints for user verlaek on ElanTech press-type fingerprint sensor (press):
+ - #0: right-index-finger
+
+$ fprintd-verify "$USER"
+Verify result: verify-match (done)
+```
+
 ## Notes
 
 - Enrollment is **24 touches** by design (more stored touches cover more of the
