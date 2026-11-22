@@ -33,10 +33,45 @@ Measured on this machine (FeinTech FPS00201, `04f3:0c3d`, 144x64):
 | genuine finger   | 25 (and 15 on retry) |
 | different finger | 4                    |
 
+## Install — build from this repo
+
+**Use this repo's `PKGBUILD`.** The Omarchy / omarchy-pkgs `libfprint-git`
+package does **not** contain `elanpress-0c3d.patch`. Installing that one leaves
+`04f3:0c3d` on the swipe driver, and enrollment/verification will keep failing.
+
+The patch is already wired up here:
+
+- `elanpress.patch` adds Filip Spanne's press driver (for `0c4f`, `0c63`, `0c6e`).
+- `elanpress-0c3d.patch` adds `04f3:0c3d` to that driver, removes it from `elan`,
+  and gives it the lower `600` pixel-delta threshold.
+- `PKGBUILD` lists `elanpress-0c3d.patch` in `source` and applies it in
+  `prepare()`; `pkgrel=7` supersedes earlier builds.
+
+```bash
+git clone https://github.com/iverlaek/libfprint-elanpress-0c3d.git
+cd libfprint-elanpress-0c3d
+makepkg --nocheck --syncdeps --cleanbuild --force
+sudo pacman -U --noconfirm libfprint-git-*.pkg.tar.zst
+sudo systemctl restart fprintd
+```
+
+If pacman says the installed version is newer, bump `pkgrel` in `PKGBUILD`
+(for example to `8`) and rebuild. Then confirm the patched driver is active:
+
+```bash
+pacman -Qi libfprint-git | grep Version
+fprintd-list "$USER"    # expect: ElanTech press-type fingerprint sensor
+```
+
+Do **not** configure PAM with `omarchy setup security fingerprint` afterwards:
+it can replace this package with the unpatched one, and it deletes any existing
+print. Use `pam-fingerprint.sh` from this repo for PAM instead.
+
 ## Files
 
 - `PKGBUILD` — Omarchy's `libfprint-git` package with `elanpress-0c3d.patch`
-  added and `pkgrel` bumped to 7.
+  added to `source`/`prepare()` and `pkgrel` bumped to 7. This is the file to
+  build with `makepkg`; see **Install** above.
 - `elanpress.patch` — Omarchy's press-driver patch (unchanged).
 - `elanpress-0c3d.patch` — the local change described above.
 - `focaltech_moc-add-pid-0xA97A.patch` — carried by the Omarchy PKGBUILD.
@@ -47,11 +82,12 @@ Measured on this machine (FeinTech FPS00201, `04f3:0c3d`, 144x64):
 ## Rebuilding after an upstream package upgrade
 
 If a future `libfprint-git` from Omarchy (or stock `libfprint`) replaces this one
-and the reader breaks again, rebuild from this directory:
+and the reader breaks again, rebuild from this repo using the same steps as in
+**Install** above:
 
 ```bash
-cd ~/Work/libfprint-elanpress-0c3d
-makepkg --nocheck --cleanbuild --force
+cd /path/to/libfprint-elanpress-0c3d    # wherever you cloned this repo
+makepkg --nocheck --syncdeps --cleanbuild --force
 sudo pacman -U --noconfirm libfprint-git-*.pkg.tar.zst
 sudo systemctl restart fprintd
 ```
