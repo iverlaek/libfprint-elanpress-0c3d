@@ -79,9 +79,9 @@ print. Use `pam-fingerprint.sh` from this repo for PAM instead.
   replicating `omarchy-setup-security-fingerprint`'s `setup_pam_config()`
   without its reinstall/re-enroll.
 - `sddm-fingerprint-show-prompt.patch` — patch for Omarchy's
-  `omarchy-fingerprint` SDDM theme: displays the PAM "place your finger"
-  message and highlights the glyph while waiting; see **Fingerprint on the
-  SDDM login screen**.
+  `omarchy-fingerprint` SDDM theme: shows the PAM "place your finger" message,
+  highlights the glyph while waiting, and adds a 󰌓 keyboard-mode fallback;
+  see **Fingerprint on the SDDM login screen**.
 
 ## Rebuilding after an upstream package upgrade
 
@@ -193,9 +193,24 @@ sudo cp -a ~/.local/share/sddm/themes/omarchy-fingerprint /usr/share/sddm/themes
 
 The patch matters: the stock theme only draws the glyph and never displays the
 PAM conversation, so clicking it with an empty password looks like nothing
-happened. It now shows the `Place your right index finger...` message and lights
-the glyph amber while the sensor is waiting. It also fixes a deprecated
-`Keys.onPressed` handler.
+happened. It now:
+
+- shows the `Place your right index finger...` message and lights 󰈷 amber while
+  the sensor is waiting;
+- adds a 󰌓 keyboard button that switches straight to password mode (focuses the
+  field and hides the fingerprint styling), and dims the fingerprint glyph
+  while in that mode;
+- switches to password mode automatically after a failed login or as soon as
+  you start typing;
+- fixes a deprecated `Keys.onPressed` handler.
+
+**Why the fingerprint is not auto-started.** Windows starts fingerprint
+authentication immediately and offers a keyboard-icon fallback. SDDM's greeter
+API cannot do that: it only exposes `login(user, password, session)`, with no
+way to cancel an in-flight authentication. A second `login()` call is rejected
+with `Existing authentication ongoing, aborting`, so auto-starting would trap
+users who need the password. Keeping both icons visible gives the same
+one-click choice without that failure mode.
 
 **3. The stock theme config overrides the fingerprint theme.** If
 `99-omarchy-login.conf` (`Current=omarchy`) loads after
@@ -209,10 +224,12 @@ sudo mv /etc/sddm.conf.d/99-omarchy-fingerprint.conf \
 grep -H 'Current=' /etc/sddm.conf.d/*.conf   # fingerprint entry must be last
 ```
 
-After logging out or rebooting, the login screen shows a `󰈷` glyph next to the
-password field. **Click the glyph** to start authentication with an empty
-password; `pam_fprintd` then prompts for the print. Touching the sensor alone
-does not initiate login from SDDM — the QML only wires the glyph's click to
+After logging out or rebooting, the login screen shows a `󰈷` glyph and a `󰌓`
+glyph next to the password field. **Click 󰈷** to start authentication with an
+empty password; `pam_fprintd` then prompts for the print. **Click 󰌓** to switch
+to password mode — the field gets focus and the fingerprint glyph dims. Typing
+a password switches automatically too. Touching the sensor alone does not
+initiate login from SDDM — the QML only wires the glyph's click to
 `sddm.login(...)`. If verification fails or times out, PAM falls back to the
 password field. Even the embedded greeter can authenticate by fingerprint:
 submitting an empty password reaches `pam_fprintd.so`, which prompts
