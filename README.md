@@ -78,6 +78,10 @@ print. Use `pam-fingerprint.sh` from this repo for PAM instead.
 - `pam-fingerprint.sh` — wires `pam_fprintd` into sudo/polkit/lock screen,
   replicating `omarchy-setup-security-fingerprint`'s `setup_pam_config()`
   without its reinstall/re-enroll.
+- `sddm-fingerprint-show-prompt.patch` — patch for Omarchy's
+  `omarchy-fingerprint` SDDM theme: displays the PAM "place your finger"
+  message and highlights the glyph while waiting; see **Fingerprint on the
+  SDDM login screen**.
 
 ## Rebuilding after an upstream package upgrade
 
@@ -182,8 +186,16 @@ picking e.g. `Hyprland (uwsm-managed)`), but no fingerprint glyph. Copy it to
 the system theme directory:
 
 ```bash
+cd ~/.local/share/sddm/themes/omarchy-fingerprint
+patch -p1 < /path/to/libfprint-elanpress-0c3d/sddm-fingerprint-show-prompt.patch
 sudo cp -a ~/.local/share/sddm/themes/omarchy-fingerprint /usr/share/sddm/themes/
 ```
+
+The patch matters: the stock theme only draws the glyph and never displays the
+PAM conversation, so clicking it with an empty password looks like nothing
+happened. It now shows the `Place your right index finger...` message and lights
+the glyph amber while the sensor is waiting. It also fixes a deprecated
+`Keys.onPressed` handler.
 
 **3. The stock theme config overrides the fingerprint theme.** If
 `99-omarchy-login.conf` (`Current=omarchy`) loads after
@@ -207,6 +219,21 @@ submitting an empty password reaches `pam_fprintd.so`, which prompts
 `Place your right index finger on the fingerprint reader`. The lock screen is
 different again — there, Omarchy's `FingerprintModel.js` reacts to the sensor
 directly.
+
+Use the **same firm, ~1 s centred press** for verification as for enrollment.
+Quick taps are ignored by the driver and short presses never reach the coverage
+gate; with `auth sufficient pam_fprintd.so`, a failed verification simply falls
+through to `pam_unix`, which is why you end up needing the password as well.
+Don't click the glyph repeatedly or press Enter again while a login is in flight:
+SDDM logs `Existing authentication ongoing, aborting` and discards those
+attempts. Wait for the prompt, press once properly, and wait for the result.
+
+A healthy fingerprint-only login looks like this in the journal:
+
+```text
+Authentication information: SDDM::Auth::INFO_UNKNOWN "Place your right index finger on the fingerprint reader"
+Authentication for user "verlaek" successful
+```
 
 To confirm the greeter found the theme, check the journal after a logout:
 

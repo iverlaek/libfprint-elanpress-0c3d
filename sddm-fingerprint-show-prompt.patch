@@ -1,0 +1,68 @@
+diff --git i/Main.qml w/Main.qml
+--- i/Main.qml
++++ w/Main.qml
+@@ -9,6 +9,7 @@
+ 
+   property string currentUser: userModel.lastUser
+   property bool loginFailed: false
++  property string infoMessage: ""
+   property int sessionIndex: {
+     for (var i = 0; i < sessionModel.rowCount(); i++) {
+       var name = (sessionModel.data(sessionModel.index(i, 0), Qt.DisplayRole) || "").toString()
+@@ -22,11 +23,18 @@
+     target: sddm
+     function onLoginFailed() {
+       root.loginFailed = true
++      root.infoMessage = ""
+       password.text = ""
+       password.focus = true
+     }
+     function onLoginSucceeded() {
+       root.loginFailed = false
++      root.infoMessage = ""
++    }
++    function onInformationMessage(message) {
++      // pam_fprintd asks the user to touch the sensor here; show it, otherwise
++      // the empty-password login looks like it did nothing.
++      root.infoMessage = message
+     }
+   }
+ 
+@@ -68,7 +76,10 @@
+         MouseArea {
+           anchors.fill: parent
+           cursorShape: Qt.PointingHandCursor
+-          onClicked: sddm.login(root.currentUser, "", root.sessionIndex)
++          onClicked: {
++            root.infoMessage = ""
++            sddm.login(root.currentUser, "", root.sessionIndex)
++          }
+         }
+       }
+ 
+@@ -118,7 +129,7 @@
+ 
+           onTextChanged: root.loginFailed = false
+ 
+-          Keys.onPressed: {
++          Keys.onPressed: function(event) {
+             if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+               sddm.login(root.currentUser, password.text, root.sessionIndex)
+               event.accepted = true
+@@ -128,6 +139,16 @@
+       }
+     }
+ 
++    Text {
++      text: root.infoMessage
++      font.family: "JetBrainsMono Nerd Font"
++      font.pixelSize: 14
++      color: "#e0af68"
++      height: 20
++      anchors.horizontalCenter: parent.horizontalCenter
++      horizontalAlignment: Text.AlignHCenter
++    }
++
+   }
+ 
+   Component.onCompleted: password.forceActiveFocus()
