@@ -169,8 +169,23 @@ hide the option on Omarchy.
 sudo mv /etc/sddm.conf.d/autologin.conf /etc/sddm.conf.d/autologin.conf.disabled
 ```
 
-**2. The stock theme overrides the fingerprint theme.** Omarchy ships
-`~/.local/share/sddm/themes/omarchy-fingerprint`, but if
+**2. Install the theme where the greeter can see it.** Omarchy ships the theme
+in `~/.local/share/sddm/themes/omarchy-fingerprint`, but the SDDM greeter runs
+as the `sddm` user and cannot read it. SDDM then logs
+
+```text
+The configured theme "omarchy-fingerprint" doesn't exist, using the embedded theme instead
+```
+
+and you get the stock Breeze greeter, with its user/session dropdown (handy for
+picking e.g. `Hyprland (uwsm-managed)`), but no fingerprint glyph. Copy it to
+the system theme directory:
+
+```bash
+sudo cp -a ~/.local/share/sddm/themes/omarchy-fingerprint /usr/share/sddm/themes/
+```
+
+**3. The stock theme config overrides the fingerprint theme.** If
 `99-omarchy-login.conf` (`Current=omarchy`) loads after
 `99-omarchy-fingerprint.conf` (`Current=omarchy-fingerprint`), the plain theme
 wins. SDDM reads `/etc/sddm.conf.d/*.conf` in filename order, so rename the
@@ -187,8 +202,19 @@ password field. **Click the glyph** to start authentication with an empty
 password; `pam_fprintd` then prompts for the print. Touching the sensor alone
 does not initiate login from SDDM — the QML only wires the glyph's click to
 `sddm.login(...)`. If verification fails or times out, PAM falls back to the
-password field. The lock screen is different: there, Omarchy's
-`FingerprintModel.js` reacts to the sensor directly.
+password field. Even the embedded greeter can authenticate by fingerprint:
+submitting an empty password reaches `pam_fprintd.so`, which prompts
+`Place your right index finger on the fingerprint reader`. The lock screen is
+different again — there, Omarchy's `FingerprintModel.js` reacts to the sensor
+directly.
+
+To confirm the greeter found the theme, check the journal after a logout:
+
+```bash
+journalctl -u sddm --since '-10 min' | grep -i theme
+```
+
+There should be no `using the embedded theme instead` line.
 
 Both renames are reversible — swap the filenames back to restore autologin or
 the stock theme.
